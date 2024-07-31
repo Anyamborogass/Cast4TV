@@ -33,3 +33,5 @@ npx expo start --dev-client --clear
 ```
 
 3. Start the application on the device and connect to the server (for exanmple: 192.168.0.200:8081)
+
+### License
