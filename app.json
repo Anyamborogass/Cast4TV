@@ -12,7 +12,10 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": false,
+      "infoPlist": {
+        "NSLocalNetworkUsageDescription": "The app uses the local network to discover Cast-enabled devices on your WiFi network."
+      }
     },
     "android": {
       "adaptiveIcon": {
