@@ -23,8 +23,10 @@ const RenderChannel = ({ route }) => {
   const playerRef = useRef(null);
 
   useEffect(() => {
-    if (client) {
-      loadStreamToChromecast({ client: client });
+    //If we have the stream playing, we prepare the media loading
+    const url = getUrl();
+    if (client && url) {
+      loadStreamToChromecast({ client: client, url: url });
     }
 
     //If we started casting then stop the current stream

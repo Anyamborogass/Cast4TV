@@ -23,9 +23,8 @@ export const fetchVideoURL = async ({ channel }) => {
       },
     });
 
-    const htmlContent = response.data;
-
     console.log("* Parsing HTML content...");
+    const htmlContent = response.data;
     const videoUrl = extractVideoURL(htmlContent);
 
     return videoUrl;
@@ -52,7 +51,7 @@ const extractVideoURL = (htmlContent) => {
     if (questionMarkIndex !== -1) {
       urlString = urlString.substring(0, questionMarkIndex);
 
-      console.log("* We got MATCH: ", urlString);
+      console.log("* We got a MATCH: ", urlString);
     }
 
     if (!urlString.toLowerCase().includes("bumper")) {

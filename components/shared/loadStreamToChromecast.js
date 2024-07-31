@@ -14,7 +14,8 @@ const loadStreamToChromecast = ({ client, url }) => {
             },
           ],
           title: "M4 Sport",
-          type: "stream",
+          type: "user",
+          mykey: "M4 Sport",
         },
       },
     });

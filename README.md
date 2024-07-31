@@ -32,6 +32,4 @@ eas build --platform {android/ios} --profile dev --local
 npx expo start --dev-client --clear
 ```
 
-3. Start the application on the device and connect to the server (for exanmple: 192.168.0.200:8081)
-
-### License
+3. Start the application on the device and connect to the server (for example: http://192.168.0.200:8081)
