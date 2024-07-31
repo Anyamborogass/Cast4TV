@@ -1,0 +1,36 @@
+{
+    "cli": {
+      "version": ">= 2.1.0"
+    },
+    "build": { 
+      "dev": {
+        "developmentClient": true,
+        "distribution": "internal",
+        "android": {
+          "buildType": "apk",
+          "resourceClass": "medium"
+        },
+        "ios":{
+          "simulator":false,
+          "resourceClass": "medium"
+        }
+      },
+      "localProd": {
+        "distribution": "internal"
+      },
+      "production": {
+        "ios": {
+          "resourceClass": "medium",
+          "image": "latest"
+        },
+        "android": {
+          "resourceClass": "medium"
+        },
+        "channel": "production"  
+      }
+    },
+    "submit": {
+      "production": {}
+    }
+  }
+  
