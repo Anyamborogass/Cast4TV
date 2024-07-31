@@ -1,16 +1,11 @@
 import { StatusBar } from "expo-status-bar";
-import { StyleSheet, Text, View } from "react-native";
 import MainStack from "./navigation";
 
 export default function App() {
-  return <MainStack />;
+  return (
+    <>
+      <MainStack />
+      <StatusBar backgroundColor="#f4511e" barStyle="light-content" />
+    </>
+  );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#fff",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-});
