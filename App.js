@@ -4,8 +4,9 @@ import MainStack from "./navigation";
 export default function App() {
   return (
     <>
-      <MainStack />
       <StatusBar backgroundColor="#f4511e" barStyle="light-content" />
+
+      <MainStack />
     </>
   );
 }

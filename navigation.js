@@ -16,7 +16,7 @@ export default function MainStack() {
       <DrawerContentScrollView {...props}>
         <View style={{ padding: 20 }}>
           <Text style={{ color: "white", fontSize: 18, fontWeight: "bold" }}>
-            Csatornák
+            Channels
           </Text>
         </View>
         <DrawerItemList {...props} />

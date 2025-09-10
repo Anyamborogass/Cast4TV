@@ -23,21 +23,18 @@ const RenderChannel = ({ route }) => {
   const playerRef = useRef(null);
 
   useEffect(() => {
-    //If we have the stream playing, we prepare the media loading
-    const url = getUrl();
-    if (client && url) {
-      loadStreamToChromecast({ client: client, url: url });
-    }
+    // If we have both a Chromecast client and a stream URL, cast immediately
+    if (client && videoURL) {
+      loadStreamToChromecast({ client, url: videoURL });
 
-    //If we started casting then stop the current stream
-    if (castSession) {
+      // Pause local player so you don’t double-play
       try {
-        playerRef.current.pause();
+        playerRef.current?.pause();
       } catch (error) {
-        console.log(error.message);
+        console.log("Error pausing local video:", error.message);
       }
     }
-  }, [client, castSession]);
+  }, [client, videoURL]);
 
   async function playMedia() {
     fetchVideoURL({ channel: channel })
