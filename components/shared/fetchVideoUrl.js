@@ -36,27 +36,27 @@ export const fetchVideoURL = async ({ channel }) => {
 const extractVideoURL = (htmlContent) => {
   console.log("* Trying to extract video URL...");
 
-  const pattern = /"file": "(.*?)"/g;
+  // Matches both `"file":"..."` and `"file": "..."` (markup spacing varies).
+  const pattern = /"file":\s*"(.*?)"/g;
   let match;
   while ((match = pattern.exec(htmlContent)) !== null) {
     console.log("* Searching for URL...");
 
-    let urlString = match[1]
-      .replace(/%5C\//g, "/")
-      .replace(/\\/g, "")
-      .replace(/\\/, "");
-    urlString = decodeURIComponent(urlString);
+    // The URL is JSON-escaped in the page (e.g. `https:\/\/...`). Unescape the
+    // slashes but KEEP the full URL — including the `?v=5iip:<ip>` query token.
+    // That token binds the stream to the requesting IP and is required for
+    // playback (the stream is geo-restricted to Hungary); stripping it makes
+    // the CDN reject the segments and the player renders a black screen.
+    let urlString = match[1].replace(/\\\//g, "/").replace(/\\/g, "");
 
-    const questionMarkIndex = urlString.indexOf("?");
-    if (questionMarkIndex !== -1) {
-      urlString = urlString.substring(0, questionMarkIndex);
-
-      console.log("* We got a MATCH: ", urlString);
+    // Skip ad / bumper / preroll entries — we only want the live content stream.
+    if (/bumper|preroll|postroll/i.test(urlString)) {
+      console.log("* Skipping ad/bumper URL");
+      continue;
     }
 
-    if (!urlString.toLowerCase().includes("bumper")) {
-      return urlString;
-    }
+    console.log("* We got a MATCH:", urlString);
+    return urlString;
   }
   return null;
 };
