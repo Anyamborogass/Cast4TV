@@ -6,7 +6,8 @@
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "postinstall": "patch-package"
   },
   "dependencies": {
     "@react-navigation/drawer": "^7.12.2",
@@ -30,5 +31,9 @@
     "react-native-worklets": "0.8.3",
     "zustand": "^5.0.14"
   },
-  "private": true
+  "private": true,
+  "devDependencies": {
+    "patch-package": "^8.0.1",
+    "postinstall-postinstall": "^2.1.0"
+  }
 }

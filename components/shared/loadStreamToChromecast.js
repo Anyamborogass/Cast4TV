@@ -2,11 +2,14 @@ import { MediaHlsSegmentFormat } from "react-native-google-cast";
 
 const loadStreamToChromecast = ({ client, url }) => {
   if (client && url) {
+    const isDash = url.toLowerCase().includes(".mpd");
+
     client.loadMedia({
       mediaInfo: {
         contentUrl: url,
-        contentType: "application/x-mpegURL",
-        hlsSegmentFormat: MediaHlsSegmentFormat.TS,
+        contentType: isDash ? "application/dash+xml" : "application/x-mpegURL",
+        // hlsSegmentFormat only applies to HLS streams.
+        ...(isDash ? {} : { hlsSegmentFormat: MediaHlsSegmentFormat.TS }),
         metadata: {
           images: [
             {

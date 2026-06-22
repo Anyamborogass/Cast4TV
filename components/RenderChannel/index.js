@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { View, Text, Button, ActivityIndicator, StyleSheet } from "react-native";
-import Video from "react-native-video";
+import Video, { DRMType } from "react-native-video";
 import useUrlStore from "../../zustand/useUrlStore";
 import { useRemoteMediaClient } from "react-native-google-cast";
 import { loadStreamToChromecast } from "../shared/loadStreamToChromecast";
@@ -18,6 +18,9 @@ const RenderChannel = ({ route }) => {
   const getUrl = useUrlStore((state) => state.getUrl);
 
   const [videoURL, setVideoURL] = useState("");
+  // M4's live stream is Widevine-encrypted DASH; this holds the license server
+  // URL scraped alongside the manifest. Null for clear (DRM-free) streams.
+  const [licenseServer, setLicenseServer] = useState(null);
   const [loading, setLoading] = useState(true);
   const [buffering, setBuffering] = useState(false);
   const [error, setError] = useState("");
@@ -44,10 +47,11 @@ const RenderChannel = ({ route }) => {
     setError("");
     try {
       // Always re-scrape so we get a fresh, IP-tokenized stream URL.
-      const url = await fetchVideoURL({ channel });
-      if (url) {
-        setVideoURL(url);
-        setUrl(url);
+      const source = await fetchVideoURL({ channel });
+      if (source?.url) {
+        setVideoURL(source.url);
+        setLicenseServer(source.licenseServer ?? null);
+        setUrl(source.url);
       } else {
         setError("No suitable video URL found");
       }
@@ -73,8 +77,29 @@ const RenderChannel = ({ route }) => {
   // The stream URL is bound to the viewer's IP via a token that can expire or
   // be rejected. Instead of leaving a black player, auto re-fetch a fresh URL
   // a few times before surfacing the error.
+  //
+  // EXCEPTION: DRM errors are fatal, not transient. The Widevine license server
+  // returns a license that doesn't contain the content keys, so re-scraping
+  // produces the same un-decryptable stream. Worse, the decrypt error fires
+  // AFTER onLoad (which resets retryCount), so retrying here loops forever and
+  // eventually crashes. Surface DRM failures immediately without retrying.
   const handleVideoError = (e) => {
-    console.log("* Video playback error:", JSON.stringify(e?.error ?? e));
+    const err = e?.error ?? e;
+    console.log("* Video playback error:", JSON.stringify(err));
+
+    const isDrmError =
+      String(err?.errorCode) === "26006" ||
+      /DRM|license|crypto|key/i.test(String(err?.errorString ?? ""));
+
+    if (isDrmError) {
+      console.log("* DRM error — not retrying (license is missing content keys).");
+      setError(
+        "This channel is DRM-protected and can't be decrypted on this device. " +
+          "Tap Restart Stream to try again."
+      );
+      return;
+    }
+
     if (retryCount.current < MAX_AUTO_RETRIES) {
       retryCount.current += 1;
       console.log(`* Auto-retrying stream (${retryCount.current}/${MAX_AUTO_RETRIES})...`);
@@ -118,7 +143,25 @@ const RenderChannel = ({ route }) => {
       <View>
         <Video
           ref={playerRef}
-          source={{ uri: videoURL }}
+          source={{
+            uri: videoURL,
+            // v6 moved DRM config from the top-level `drm` prop into `source`.
+            // The license endpoint is reached in Widevine privacy mode (enabled
+            // natively via a service certificate in the patched DRMManager.kt);
+            // these headers mirror the working web-player request.
+            ...(licenseServer
+              ? {
+                  drm: {
+                    type: DRMType.WIDEVINE,
+                    licenseServer,
+                    headers: {
+                      Referer: "https://player.mediaklikk.hu/",
+                      Origin: "https://player.mediaklikk.hu",
+                    },
+                  },
+                }
+              : {}),
+          }}
           style={styles.video}
           controls={true}
           resizeMode="contain"
