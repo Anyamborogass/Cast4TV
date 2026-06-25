@@ -1,89 +1,74 @@
 diff --git a/node_modules/react-native-video/android/src/main/java/com/brentvatne/exoplayer/DRMManager.kt b/node_modules/react-native-video/android/src/main/java/com/brentvatne/exoplayer/DRMManager.kt
-index 462f47a..b648abb 100644
+index 462f47a..1ffa029 100644
 --- a/node_modules/react-native-video/android/src/main/java/com/brentvatne/exoplayer/DRMManager.kt
 +++ b/node_modules/react-native-video/android/src/main/java/com/brentvatne/exoplayer/DRMManager.kt
-@@ -1,5 +1,8 @@
+@@ -1,11 +1,15 @@
  package com.brentvatne.exoplayer
  
-+import android.util.Base64
 +import android.util.Log
 +import androidx.media3.common.C
  import androidx.media3.common.util.Util
  import androidx.media3.datasource.HttpDataSource
  import androidx.media3.exoplayer.drm.DefaultDrmSessionManager
-@@ -13,6 +16,50 @@ import java.util.UUID
- class DRMManager(private val dataSourceFactory: HttpDataSource.Factory) : DRMManagerSpec {
-     private var hasDrmFailed = false
+ import androidx.media3.exoplayer.drm.DrmSessionManager
++import androidx.media3.exoplayer.drm.ExoMediaDrm
+ import androidx.media3.exoplayer.drm.FrameworkMediaDrm
+ import androidx.media3.exoplayer.drm.HttpMediaDrmCallback
++import androidx.media3.exoplayer.drm.MediaDrmCallback
+ import androidx.media3.exoplayer.drm.UnsupportedDrmException
+ import com.brentvatne.common.api.DRMProps
+ import java.util.UUID
+@@ -23,16 +27,53 @@ class DRMManager(private val dataSourceFactory: HttpDataSource.Factory) : DRMMan
+         }
  
-+    companion object {
-+        // Cast4TV: fallback toggle. The primary attempt is a clear L3 challenge
-+        // (matches the web player). If that build still returns "Provided content
-+        // key is not in license", flip this to `true` and rebuild the dev client to
-+        // ALSO send the challenge in privacy mode with the BuyDRM service cert.
-+        private const val APPLY_WIDEVINE_PRIVACY_MODE = false
-+
-+        // --- Cast4TV patch: Widevine privacy mode ---------------------------------
-+        // Some license servers (here BuyDRM/KeyOS, used by mediaklikk.hu / M4 Sport
-+        // via drm.connectmedia.hu) only return a license that actually contains the
-+        // content keys when the license challenge is sent in *privacy mode* — i.e.
-+        // with the ClientIdentification encrypted using the provider's service
-+        // certificate. react-native-video never fetches that certificate, so it
-+        // sends a clear challenge and the server replies with a keyless license
-+        // ("Provided content key is not in license" → black screen / DRM error).
-+        //
-+        // Setting the service certificate on the FrameworkMediaDrm switches the CDM
-+        // into privacy mode, after which ExoPlayer produces the encrypted challenge
-+        // the server expects. The certificate below is the provider service
-+        // certificate returned by drm.connectmedia.hu's SERVICE_CERTIFICATE_REQUEST
-+        // (a long-lived, non-secret value — the same one the web player uses).
-+        //
-+        // The Widevine MediaDrm "serviceCertificate" property's exact framing is
-+        // ambiguous across devices (full SignedMessage vs. inner SignedDrmCertificate),
-+        // so we try both and keep the first one the CDM accepts.
-+        private const val WIDEVINE_SERVICE_CERT_SIGNED_MESSAGE =
-+            "CAUSuQUKswIIAxIQTBvbgP1Avrk5wSGIMyCvYRjV5pC7BSKOAjCCAQoCggEBANZJ542CyvnJY1c3AsvH1jtzpXtHIfaL+gaiqFK9TQG3hA5UZq2kJaBVe+JfXKL4OV1qwyV18/OXiWeNFXJc7TTSkuC+oqnNFIuICNCvAH2dhpB/FBOm7w6X8kGQUZh9vm0QxbpLct60VUl1uwajN76lJRtrIkZyvy9+Ep6AST3cYPDWwhIwao6BDSWDk8XlxT+Lu22RgaiYPUgBUhnc3uhN4jyYZj5lQ4HIw7YJ8rMTI+CVS1TcxAeQfwoDfmLkIK0ifRBuUbKVDFXKaHCD62+MOytkCQsDGuSWAL+zX2lFtuyIEU3tF1yAHHZNP4OilJktHA4rw600jhl8OazEe/MCAwEAAToGYnV5ZHJtEoADfn/wSHa0UlyDQqzv+GDaAbT8sMV7tUpqXbAHSCJRmdIDX/ZuZPLVJucxSnEVakX5goeMELdkKjMeGi75dojRoVEPpWw7GJSxzxZ8LAjRE+Y2ymVxyKgeH7MZxVIGhxxBosUVnOR3LyCfKiUArK/cZ2wQYJ/mOFOmBQDEmDU7nkGclIJOxY0BKNwpMlKJFWy32srxXJlDJ1VozWdkLxZuMP6J0qzqsZGm0AIMXPMPha16XIsycTPA5O7cjb3fF2hqWZF7ah1NMbcvfprZiPfJPCWnwtL+ZCz8poq1PJ2QRXr0GE1ZwS5CDv/AmOiE2i3NuhdVTrBi1aQ6QBB5rkERA2ypjBAPV59PreurelpBx8kgZSTxwITRJJvO46INq0Jy7bHXL42iDli25YatVW4s7IlGPHIjSphQ/Z4k/PKwX3vQOe5LvGWyRN4OXcNFBdZB6yv5k+2LYW2yhz5NFjO92p4YCwSXx/s/7EidD4tev5Ry6N3/heqc7YIIo2q4hsyp"
-+        private const val WIDEVINE_SERVICE_CERT_INNER =
-+            "CrMCCAMSEEwb24D9QL65OcEhiDMgr2EY1eaQuwUijgIwggEKAoIBAQDWSeeNgsr5yWNXNwLLx9Y7c6V7RyH2i/oGoqhSvU0Bt4QOVGatpCWgVXviX1yi+DldasMldfPzl4lnjRVyXO000pLgvqKpzRSLiAjQrwB9nYaQfxQTpu8Ol/JBkFGYfb5tEMW6S3LetFVJdbsGoze+pSUbayJGcr8vfhKegEk93GDw1sISMGqOgQ0lg5PF5cU/i7ttkYGomD1IAVIZ3N7oTeI8mGY+ZUOByMO2CfKzEyPglUtU3MQHkH8KA35i5CCtIn0QblGylQxVymhwg+tvjDsrZAkLAxrklgC/s19pRbbsiBFN7RdcgBx2TT+DopSZLRwOK8OtNI4ZfDmsxHvzAgMBAAE6BmJ1eWRybRKAA35/8Eh2tFJcg0Ks7/hg2gG0/LDFe7VKal2wB0giUZnSA1/2bmTy1SbnMUpxFWpF+YKHjBC3ZCozHhou+XaI0aFRD6VsOxiUsc8WfCwI0RPmNsplccioHh+zGcVSBoccQaLFFZzkdy8gnyolAKyv3GdsEGCf5jhTpgUAxJg1O55BnJSCTsWNASjcKTJSiRVst9rK8VyZQydVaM1nZC8WbjD+idKs6rGRptACDFzzD4WtelyLMnEzwOTu3I293xdoalmRe2odTTG3L36a2Yj3yTwlp8LS/mQs/KaKtTydkEV69BhNWcEuQg7/wJjohNotzboXVU6wYtWkOkAQea5BEQNsqYwQD1efT63rq3paQcfJIGUk8cCE0SSbzuOiDatCcu2x1y+Nog5YtuWGrVVuLOyJRjxyI0qYUP2eJPzysF970DnuS7xlskTeDl3DRQXWQesr+ZPti2Ftsoc+TRYzvdqeGAsEl8f7P+xInQ+LXr+Ucujd/4XqnO2CCKNquIbMqQ=="
-+
-+        private fun applyWidevinePrivacyMode(mediaDrm: FrameworkMediaDrm) {
-+            for (b64 in listOf(WIDEVINE_SERVICE_CERT_INNER, WIDEVINE_SERVICE_CERT_SIGNED_MESSAGE)) {
-+                try {
-+                    val cert = Base64.decode(b64, Base64.NO_WRAP)
-+                    mediaDrm.setPropertyByteArray("serviceCertificate", cert)
-+                    Log.i("Cast4TV-DRM", "Widevine privacy mode enabled (cert ${cert.size}B)")
-+                    return
-+                } catch (e: Exception) {
-+                    Log.w("Cast4TV-DRM", "serviceCertificate candidate rejected: ${e.message}")
-+                }
+         try {
+-            val drmCallback = HttpMediaDrmCallback(drmProps.drmLicenseServer, dataSourceFactory)
++            val httpDrmCallback = HttpMediaDrmCallback(drmProps.drmLicenseServer, dataSourceFactory)
+ 
+             // Set DRM headers
+             val keyRequestPropertiesArray = drmProps.drmLicenseHeader
+             for (i in keyRequestPropertiesArray.indices step 2) {
+-                drmCallback.setKeyRequestProperty(keyRequestPropertiesArray[i], keyRequestPropertiesArray[i + 1])
++                httpDrmCallback.setKeyRequestProperty(keyRequestPropertiesArray[i], keyRequestPropertiesArray[i + 1])
 +            }
-+        }
-+    }
 +
-     @Throws(UnsupportedDrmException::class)
-     override fun buildDrmSessionManager(uuid: UUID, drmProps: DRMProps): DrmSessionManager? = buildDrmSessionManager(uuid, drmProps, 0)
- 
-@@ -33,6 +80,26 @@ class DRMManager(private val dataSourceFactory: HttpDataSource.Factory) : DRMMan
++            // Cast4TV: surface the server's response code/body when a Widevine
++            // license request fails. media3's InvalidResponseCodeException carries
++            // the response body, but the default error path discards it. Log it
++            // under the "Cast4TV-DRM" tag (adb logcat -s Cast4TV-DRM) so a future
++            // license failure can be diagnosed without re-patching. No-op on success.
++            val drmCallback = object : MediaDrmCallback {
++                override fun executeProvisionRequest(uuid: UUID, request: ExoMediaDrm.ProvisionRequest): ByteArray =
++                    httpDrmCallback.executeProvisionRequest(uuid, request)
++
++                override fun executeKeyRequest(uuid: UUID, request: ExoMediaDrm.KeyRequest): ByteArray {
++                    try {
++                        return httpDrmCallback.executeKeyRequest(uuid, request)
++                    } catch (e: Exception) {
++                        var c: Throwable? = e
++                        while (c != null) {
++                            if (c is HttpDataSource.InvalidResponseCodeException) {
++                                val body = c.responseBody
++                                val text = if (body != null && body.isNotEmpty()) String(body, Charsets.UTF_8) else "<empty>"
++                                Log.e("Cast4TV-DRM", "License HTTP ${c.responseCode} ${c.responseMessage}: $text")
++                                break
++                            }
++                            c = c.cause
++                        }
++                        throw e
++                    }
++                }
+             }
  
              val mediaDrm = FrameworkMediaDrm.newInstance(uuid)
  
-+            // Cast4TV patch: force Widevine L3 (software) to match the working web
-+            // player. The M4 Sport stream decrypts fine in Chrome (Widevine L3) but
-+            // fails on L1-hardware devices (e.g. Pixel/Tensor) with "Provided content
-+            // key is not in license": connectmedia.hu issues a license keyed to the
-+            // challenge's robustness, and the L1 challenge gets back keys whose KIDs
-+            // don't match the content. Forcing L3 makes the CDM send the same kind of
-+            // challenge the desktop browser does, so the server returns the right keys.
-+            //
-+            // We intentionally do NOT apply privacy mode here: the page's JWPlayer
-+            // playData carries no serverCertificate, so the web player sends a CLEAR
-+            // challenge — the previously-tried hardcoded BuyDRM service certificate
-+            // (see applyWidevinePrivacyMode) did not change the outcome. Re-enable it
-+            // only if a clear L3 challenge still fails (flip APPLY_WIDEVINE_PRIVACY_MODE).
++            // Cast4TV: force Widevine L3 (software) to match the web player. M4
++            // Sport's connectmedia.hu license is keyed to the challenge robustness;
++            // on L1-hardware devices the L1 challenge gets back keys whose KIDs
++            // don't match the content. Forcing L3 makes the CDM send the same kind
++            // of challenge the desktop browser does, so the server returns usable keys.
 +            if (uuid == C.WIDEVINE_UUID) {
 +                mediaDrm.setPropertyString("securityLevel", "L3")
-+                if (APPLY_WIDEVINE_PRIVACY_MODE) {
-+                    applyWidevinePrivacyMode(mediaDrm)
-+                }
 +            }
 +
              // TODO: This isn't very secure, should be fixed

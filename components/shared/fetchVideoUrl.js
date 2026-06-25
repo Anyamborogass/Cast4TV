@@ -50,8 +50,16 @@ const extractVideoSource = (htmlContent) => {
   // license server URL alongside the manifest — without it ExoPlayer can't
   // decrypt the video and renders a black screen. The `drm` block is optional
   // (clear streams / bumper ads don't have one).
+  // NOTE: the `widevine` object has more than one key
+  // (`{"url":"...","serverCertificateUrl":"..."}`), so we must NOT anchor the
+  // license-URL match on the closing `}}`. Doing so forces the non-greedy
+  // `(.*?)` to backtrack past the real closing quote of `url` until it finds a
+  // quote followed by `}}`, swallowing `","serverCertificateUrl":"..."` into the
+  // captured URL. The license POST then goes to a garbage path and the server
+  // replies HTTP 466 {"errorCode":10009}. Capturing just the `url` value and
+  // letting `(.*?)"` close at the first real quote fixes it.
   const pattern =
-    /"file":\s*"(.*?)"(?:\s*,\s*"type":\s*"[^"]*")?(?:\s*,\s*"drm":\s*\{\s*"widevine":\s*\{\s*"url":\s*"(.*?)"\s*\}\s*\})?/g;
+    /"file":\s*"(.*?)"(?:\s*,\s*"type":\s*"[^"]*")?(?:\s*,\s*"drm":\s*\{\s*"widevine":\s*\{\s*"url":\s*"(.*?)")?/g;
 
   const candidates = [];
   let match;

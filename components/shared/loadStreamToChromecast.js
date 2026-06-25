@@ -4,7 +4,8 @@ const loadStreamToChromecast = ({ client, url }) => {
   if (client && url) {
     const isDash = url.toLowerCase().includes(".mpd");
 
-    client.loadMedia({
+    // Return the promise so callers can await readiness / catch+retry.
+    return client.loadMedia({
       mediaInfo: {
         contentUrl: url,
         contentType: isDash ? "application/dash+xml" : "application/x-mpegURL",
@@ -23,6 +24,8 @@ const loadStreamToChromecast = ({ client, url }) => {
       },
     });
   }
+
+  return Promise.resolve();
 };
 
 export { loadStreamToChromecast };

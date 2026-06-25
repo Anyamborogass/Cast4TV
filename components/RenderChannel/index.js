@@ -6,6 +6,7 @@ import { useRemoteMediaClient } from "react-native-google-cast";
 import { loadStreamToChromecast } from "../shared/loadStreamToChromecast";
 import { fetchVideoURL } from "../shared/fetchVideoUrl";
 import { useFocusEffect } from "@react-navigation/native";
+import * as ScreenOrientation from "expo-screen-orientation";
 
 const MAX_AUTO_RETRIES = 3;
 
@@ -29,17 +30,46 @@ const RenderChannel = ({ route }) => {
   const retryCount = useRef(0);
 
   useEffect(() => {
-    // If we have both a Chromecast client and a stream URL, cast immediately
-    if (client && videoURL) {
-      loadStreamToChromecast({ client, url: videoURL });
+    // If we have both a Chromecast client and a stream URL, cast immediately.
+    if (!client || !videoURL) return;
 
-      // Pause local player so you don’t double-play
-      try {
-        playerRef.current?.pause();
-      } catch (error) {
-        console.log("Error pausing local video:", error.message);
-      }
-    }
+    // The moment `client` first appears the receiver app has often just
+    // launched and isn't ready to accept loadMedia yet — that single call
+    // fails silently and you're left staring at a blank TV. Retry a few times
+    // with a short backoff so connecting via the Cast button is a single step:
+    // tap to connect → stream auto-loads, no "Load stream to device" needed.
+    let cancelled = false;
+    let attempt = 0;
+
+    const tryLoad = () => {
+      if (cancelled) return;
+      attempt += 1;
+      loadStreamToChromecast({ client, url: videoURL })
+        .then(() => {
+          if (cancelled) return;
+          // Pause local player so you don't double-play.
+          try {
+            playerRef.current?.pause();
+          } catch (error) {
+            console.log("Error pausing local video:", error.message);
+          }
+        })
+        .catch((err) => {
+          console.log(
+            `Auto-cast load failed (attempt ${attempt}):`,
+            err?.message ?? err
+          );
+          if (!cancelled && attempt < MAX_AUTO_RETRIES) {
+            setTimeout(tryLoad, 600 * attempt);
+          }
+        });
+    };
+
+    tryLoad();
+
+    return () => {
+      cancelled = true;
+    };
   }, [client, videoURL]);
 
   const playMedia = useCallback(async () => {
@@ -114,6 +144,17 @@ const RenderChannel = ({ route }) => {
     setBuffering(false);
   };
 
+  // The app is pinned to portrait (see App.js). When the user enters the
+  // video's native fullscreen, unlock to landscape so the stream fills the
+  // screen; re-lock to portrait when fullscreen is dismissed.
+  const handleFullscreenWillPresent = () => {
+    ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE);
+  };
+
+  const handleFullscreenWillDismiss = () => {
+    ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
+  };
+
   const loadStream = () => {
     const url = getUrl();
     loadStreamToChromecast({ client, url });
@@ -146,14 +187,22 @@ const RenderChannel = ({ route }) => {
           source={{
             uri: videoURL,
             // v6 moved DRM config from the top-level `drm` prop into `source`.
-            // The license endpoint is reached in Widevine privacy mode (enabled
-            // natively via a service certificate in the patched DRMManager.kt);
-            // these headers mirror the working web-player request.
+            // These headers mirror the working web-player license request.
+            //
+            // multiDrm: true is REQUIRED here. M4's live DASH uses SEPARATE
+            // Widevine KIDs for the video and audio tracks. With the default
+            // (multiDrm=false) ExoPlayer opens a single DRM session keyed to the
+            // first track's PSSH (video), so the license it fetches only contains
+            // the video key. The audio renderer then fails to decrypt with
+            // "Provided content key is not in license" (ERROR_DRM_NO_LICENSE,
+            // errorCode 26006) a couple seconds in. multiDrm=true makes ExoPlayer
+            // open one session per KID and fetch both the video and audio keys.
             ...(licenseServer
               ? {
                   drm: {
                     type: DRMType.WIDEVINE,
                     licenseServer,
+                    multiDrm: true,
                     headers: {
                       Referer: "https://player.mediaklikk.hu/",
                       Origin: "https://player.mediaklikk.hu",
@@ -168,6 +217,8 @@ const RenderChannel = ({ route }) => {
           onError={handleVideoError}
           onLoad={handleLoad}
           onBuffer={({ isBuffering }) => setBuffering(isBuffering)}
+          onFullscreenPlayerWillPresent={handleFullscreenWillPresent}
+          onFullscreenPlayerWillDismiss={handleFullscreenWillDismiss}
         />
         {buffering && (
           <View style={styles.bufferOverlay} pointerEvents="none">
