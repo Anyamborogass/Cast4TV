@@ -1,10 +1,23 @@
-import { useEffect } from "react";
+import { useEffect, useCallback } from "react";
 import { StatusBar } from "expo-status-bar";
 import * as ScreenOrientation from "expo-screen-orientation";
-import CastContext from "react-native-google-cast";
+import CastContext, { useCastChannel } from "react-native-google-cast";
 import MainStack from "./navigation";
 
+// Custom channel the receiver broadcasts its logs on. Must match DEBUG_NS in
+// receiver/index.html. Lets us read receiver-side logs in Metro since
+// chrome://inspect is blocked on Chromecast.
+const DEBUG_NS = "urn:x-cast:com.cast4tv.debug";
+
 export default function App() {
+  // Print receiver-side logs (broadcast over DEBUG_NS) into Metro.
+  useCastChannel(
+    DEBUG_NS,
+    useCallback((message) => {
+      console.log("* [CAST][receiver]", JSON.stringify(message));
+    }, [])
+  );
+
   useEffect(() => {
     // app.json declares orientation "default" so the OS *allows* landscape
     // (required for the video's fullscreen rotation). Keep the app itself

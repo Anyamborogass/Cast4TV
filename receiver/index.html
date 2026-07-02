@@ -52,6 +52,16 @@
       const LOG_TAG = "Cast4TV";
       const castDebugLogger = cast.debug.CastDebugLogger.getInstance();
 
+      // Custom channel: broadcast our logs BACK to the phone sender so they
+      // land in Metro. chrome://inspect is blocked on Chromecast and the on-TV
+      // overlay is unreliable, so this is the channel we actually read on.
+      const DEBUG_NS = "urn:x-cast:com.cast4tv.debug";
+      const sendDebug = (level, msg) => {
+        try {
+          context.sendCustomMessage(DEBUG_NS, undefined, { level, msg });
+        } catch (e) {}
+      };
+
       // Enable the overlay once the receiver is ready.
       context.addEventListener(cast.framework.system.EventType.READY, () => {
         castDebugLogger.setEnabled(true);
@@ -73,12 +83,14 @@
         try {
           castDebugLogger.info(LOG_TAG, msg);
         } catch (e) {}
+        sendDebug("log", msg);
       };
       const tvError = (msg) => {
         console.error("[Cast4TV receiver]", msg);
         try {
           castDebugLogger.error(LOG_TAG, msg);
         } catch (e) {}
+        sendDebug("error", msg);
       };
 
       // Intercept every LOAD request. If the sender attached DRM info in
@@ -183,7 +195,18 @@
         }
       );
 
-      context.start();
+      // Register the debug namespace so sendCustomMessage can broadcast on it,
+      // and mark the receiver version so we can confirm the device loaded the
+      // LATEST build (Chromecast caches receivers aggressively — if the version
+      // below doesn't show up in Metro, the device is serving a stale copy and
+      // needs a reboot to refresh).
+      const RECEIVER_VERSION = "debug-3";
+      const options = new cast.framework.CastReceiverOptions();
+      options.customNamespaces = Object.assign({}, options.customNamespaces, {
+        [DEBUG_NS]: cast.framework.system.MessageType.JSON,
+      });
+      context.start(options);
+      tvLog("receiver started, version=" + RECEIVER_VERSION);
     </script>
   </body>
 </html>
