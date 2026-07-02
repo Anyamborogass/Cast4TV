@@ -53,6 +53,19 @@
             const customData = (media && media.customData) || {};
             const licenseUrl = customData.licenseUrl;
 
+            // Log EXACTLY what the sender delivered. If customData is empty
+            // here, react-native-google-cast didn't forward mediaInfo.customData
+            // and licenseUrl will be undefined (Widevine never gets configured).
+            console.log(
+              "[Cast4TV receiver] LOAD:",
+              JSON.stringify({
+                contentUrl: media && (media.contentUrl || media.contentId),
+                contentType: media && media.contentType,
+                streamType: media && media.streamType,
+                customData,
+              })
+            );
+
             if (licenseUrl) {
               // Start from the current playback config so we don't clobber
               // other defaults, then layer Widevine settings on top.
@@ -83,6 +96,10 @@
 
               loadRequest.playbackConfig = playbackConfig;
               console.log("[Cast4TV receiver] Widevine configured:", licenseUrl);
+            } else {
+              console.warn(
+                "[Cast4TV receiver] NO licenseUrl in customData — Widevine NOT configured. DRM playback will fail."
+              );
             }
           } catch (e) {
             console.error("[Cast4TV receiver] LOAD interceptor error:", e);
@@ -91,12 +108,43 @@
         }
       );
 
-      // Surface receiver-side errors in the debug console (chrome://inspect on
-      // the TV, or the Cast Command & Control tool).
+      // Map CAF's numeric detailedErrorCode back to a readable name so the
+      // console tells us WHICH layer failed (MEDIAKEYS_* = DRM/license,
+      // DASH_*/SEGMENT_* = manifest/segment fetch, NETWORK_* = transport).
+      const ERROR_NAMES = Object.entries(
+        cast.framework.events.DetailedErrorCode || {}
+      ).reduce((acc, [name, code]) => {
+        acc[code] = name;
+        return acc;
+      }, {});
+
+      // Log the raw license request/response so we can see if the DRM server
+      // rejects the Chromecast's challenge (status, headers actually sent).
+      playerManager.addEventListener(
+        cast.framework.events.EventType.MEDIA_STATUS,
+        (event) => {
+          if (event && event.mediaStatus && event.mediaStatus.idleReason) {
+            console.log(
+              "[Cast4TV receiver] idleReason:",
+              event.mediaStatus.idleReason
+            );
+          }
+        }
+      );
+
       playerManager.addEventListener(
         cast.framework.events.EventType.ERROR,
         (event) => {
-          console.error("[Cast4TV receiver] player error:", event);
+          const code = event && event.detailedErrorCode;
+          console.error(
+            "[Cast4TV receiver] ERROR:",
+            JSON.stringify({
+              detailedErrorCode: code,
+              name: ERROR_NAMES[code],
+              reason: event && event.reason,
+              error: event && event.error,
+            })
+          );
         }
       );
 
