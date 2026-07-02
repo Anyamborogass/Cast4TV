@@ -27,7 +27,7 @@
         "react-native-google-cast",
         {
           "//": "Custom Web Receiver App ID. Required for Widevine DRM casting — the Default Media Receiver (CC1AD845) cannot decrypt M4's stream. Register receiver/index.html in the Cast SDK Developer Console and paste the App ID below. See receiver/README.md.",
-          "receiverAppId": "REPLACE_WITH_YOUR_RECEIVER_APP_ID"
+          "receiverAppId": "EC2D8F42"
         }
       ],
       [
