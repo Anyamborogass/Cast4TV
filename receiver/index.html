@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<!--
+  Cast4TV custom Web Receiver (CAF).
+
+  The Default Media Receiver (CC1AD845) cannot play Widevine-protected content.
+  M4 Sport's live stream is Widevine DASH, so we need this custom receiver to:
+    1. read the license server URL (+ optional headers) the sender puts in
+       `media.customData`, and
+    2. configure the CAF PlayerManager to fetch a Widevine license and decrypt
+       the stream on the TV.
+
+  HOST THIS FILE at a stable HTTPS URL and register that URL as a "Custom
+  Receiver" in the Google Cast SDK Developer Console. Put the resulting
+  Application ID into app.json (`react-native-google-cast` → `receiverAppId`).
+  See receiver/README.md for step-by-step instructions.
+-->
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Cast4TV Receiver</title>
+    <!-- CAF receiver SDK -->
+    <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        background: #000;
+      }
+      cast-media-player {
+        --background-color: #000;
+        --splash-image: url("https://upload.wikimedia.org/wikipedia/hu/thumb/f/fd/M4_logo.png/1200px-M4_logo.png");
+      }
+    </style>
+  </head>
+  <body>
+    <cast-media-player></cast-media-player>
+
+    <script>
+      const context = cast.framework.CastReceiverContext.getInstance();
+      const playerManager = context.getPlayerManager();
+
+      // Intercept every LOAD request. If the sender attached DRM info in
+      // customData, build a PlaybackConfig that points the receiver at M4's
+      // Widevine license server and forwards any custom license headers.
+      playerManager.setMessageInterceptor(
+        cast.framework.messages.MessageType.LOAD,
+        (loadRequest) => {
+          try {
+            const media = loadRequest && loadRequest.media;
+            const customData = (media && media.customData) || {};
+            const licenseUrl = customData.licenseUrl;
+
+            if (licenseUrl) {
+              // Start from the current playback config so we don't clobber
+              // other defaults, then layer Widevine settings on top.
+              const playbackConfig = Object.assign(
+                new cast.framework.PlaybackConfig(),
+                playerManager.getPlaybackConfig()
+              );
+
+              playbackConfig.licenseUrl = licenseUrl;
+              playbackConfig.protectionSystem =
+                cast.framework.ContentProtection.WIDEVINE;
+
+              // Forward custom headers (Referer/Origin, etc.) onto the license
+              // POST. NOTE: browsers treat Referer/Origin as "forbidden"
+              // request headers and may strip them; connectmedia's DRM server
+              // primarily authorizes on the IP-bound token in the manifest URL,
+              // so this is best-effort and usually not required.
+              const licenseHeaders = customData.licenseHeaders;
+              if (licenseHeaders) {
+                playbackConfig.licenseRequestHandler = (requestInfo) => {
+                  requestInfo.headers = Object.assign(
+                    {},
+                    requestInfo.headers,
+                    licenseHeaders
+                  );
+                };
+              }
+
+              loadRequest.playbackConfig = playbackConfig;
+              console.log("[Cast4TV receiver] Widevine configured:", licenseUrl);
+            }
+          } catch (e) {
+            console.error("[Cast4TV receiver] LOAD interceptor error:", e);
+          }
+          return loadRequest;
+        }
+      );
+
+      // Surface receiver-side errors in the debug console (chrome://inspect on
+      // the TV, or the Cast Command & Control tool).
+      playerManager.addEventListener(
+        cast.framework.events.EventType.ERROR,
+        (event) => {
+          console.error("[Cast4TV receiver] player error:", event);
+        }
+      );
+
+      context.start();
+    </script>
+  </body>
+</html>

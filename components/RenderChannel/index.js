@@ -29,6 +29,27 @@ const RenderChannel = ({ route }) => {
   const playerRef = useRef(null);
   const retryCount = useRef(0);
 
+  // DEBUG: log everything the receiver reports back over the cast channel.
+  // The phone's console never sees the TV's own console.log, but it DOES see
+  // media-status updates — including the idleReason that tells us WHY the
+  // receiver stopped (e.g. "error" = load/decrypt failure on the TV).
+  useEffect(() => {
+    if (!client) return;
+    console.log("* [CAST] client connected — subscribing to media status");
+    const sub = client.onMediaStatusUpdated((status) => {
+      console.log(
+        "* [CAST] status:",
+        JSON.stringify({
+          playerState: status?.playerState,
+          idleReason: status?.idleReason,
+          contentType: status?.mediaInfo?.contentType,
+          contentUrl: status?.mediaInfo?.contentUrl,
+        })
+      );
+    });
+    return () => sub?.remove?.();
+  }, [client]);
+
   useEffect(() => {
     // If we have both a Chromecast client and a stream URL, cast immediately.
     if (!client || !videoURL) return;
@@ -44,7 +65,7 @@ const RenderChannel = ({ route }) => {
     const tryLoad = () => {
       if (cancelled) return;
       attempt += 1;
-      loadStreamToChromecast({ client, url: videoURL })
+      loadStreamToChromecast({ client, url: videoURL, licenseServer })
         .then(() => {
           if (cancelled) return;
           // Pause local player so you don't double-play.
@@ -70,7 +91,7 @@ const RenderChannel = ({ route }) => {
     return () => {
       cancelled = true;
     };
-  }, [client, videoURL]);
+  }, [client, videoURL, licenseServer]);
 
   const playMedia = useCallback(async () => {
     setLoading(true);
@@ -157,7 +178,7 @@ const RenderChannel = ({ route }) => {
 
   const loadStream = () => {
     const url = getUrl();
-    loadStreamToChromecast({ client, url });
+    loadStreamToChromecast({ client, url, licenseServer });
   };
 
   if (loading) {
