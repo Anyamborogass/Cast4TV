@@ -21,6 +21,10 @@
     <title>Cast4TV Receiver</title>
     <!-- CAF receiver SDK -->
     <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
+    <!-- CAF Debug Logger: paints logs + errors as an overlay directly on the
+         TV screen. Chromecast blocks chrome://inspect remote debugging, so this
+         is how we read receiver-side logs. Safe to leave in for a debug build. -->
+    <script src="https://www.gstatic.com/cast/sdk/libs/devtools/debug_layer/caf_receiver_logger.js"></script>
     <style>
       html,
       body {
@@ -42,6 +46,41 @@
       const context = cast.framework.CastReceiverContext.getInstance();
       const playerManager = context.getPlayerManager();
 
+      // --- On-TV debug overlay -------------------------------------------
+      // Shows our log lines + CAF errors right on the television, since
+      // chrome://inspect is blocked on Chromecast hardware.
+      const LOG_TAG = "Cast4TV";
+      const castDebugLogger = cast.debug.CastDebugLogger.getInstance();
+
+      // Enable the overlay once the receiver is ready.
+      context.addEventListener(cast.framework.system.EventType.READY, () => {
+        castDebugLogger.setEnabled(true);
+        castDebugLogger.showDebugLogs(true);
+      });
+
+      // Show CORE events (errors, media status) and our own DEBUG-level tags.
+      castDebugLogger.loggerLevelByEvents = {
+        "cast.framework.events.category.CORE":
+          cast.framework.LoggerLevel.INFO,
+      };
+      castDebugLogger.loggerLevelByTags = {
+        [LOG_TAG]: cast.framework.LoggerLevel.DEBUG,
+      };
+
+      // Helper: write to BOTH the browser console and the on-TV overlay.
+      const tvLog = (msg) => {
+        console.log("[Cast4TV receiver]", msg);
+        try {
+          castDebugLogger.info(LOG_TAG, msg);
+        } catch (e) {}
+      };
+      const tvError = (msg) => {
+        console.error("[Cast4TV receiver]", msg);
+        try {
+          castDebugLogger.error(LOG_TAG, msg);
+        } catch (e) {}
+      };
+
       // Intercept every LOAD request. If the sender attached DRM info in
       // customData, build a PlaybackConfig that points the receiver at M4's
       // Widevine license server and forwards any custom license headers.
@@ -56,14 +95,15 @@
             // Log EXACTLY what the sender delivered. If customData is empty
             // here, react-native-google-cast didn't forward mediaInfo.customData
             // and licenseUrl will be undefined (Widevine never gets configured).
-            console.log(
-              "[Cast4TV receiver] LOAD:",
-              JSON.stringify({
-                contentUrl: media && (media.contentUrl || media.contentId),
-                contentType: media && media.contentType,
-                streamType: media && media.streamType,
-                customData,
-              })
+            tvLog(
+              "LOAD: " +
+                JSON.stringify({
+                  contentType: media && media.contentType,
+                  streamType: media && media.streamType,
+                  hasCustomData: Object.keys(customData).length > 0,
+                  licenseUrl: customData.licenseUrl,
+                  licenseHeaders: customData.licenseHeaders,
+                })
             );
 
             if (licenseUrl) {
@@ -95,14 +135,12 @@
               }
 
               loadRequest.playbackConfig = playbackConfig;
-              console.log("[Cast4TV receiver] Widevine configured:", licenseUrl);
+              tvLog("Widevine configured -> " + licenseUrl);
             } else {
-              console.warn(
-                "[Cast4TV receiver] NO licenseUrl in customData — Widevine NOT configured. DRM playback will fail."
-              );
+              tvError("NO licenseUrl in customData — Widevine NOT configured!");
             }
           } catch (e) {
-            console.error("[Cast4TV receiver] LOAD interceptor error:", e);
+            tvError("LOAD interceptor error: " + (e && e.message));
           }
           return loadRequest;
         }
@@ -124,10 +162,7 @@
         cast.framework.events.EventType.MEDIA_STATUS,
         (event) => {
           if (event && event.mediaStatus && event.mediaStatus.idleReason) {
-            console.log(
-              "[Cast4TV receiver] idleReason:",
-              event.mediaStatus.idleReason
-            );
+            tvLog("idleReason: " + event.mediaStatus.idleReason);
           }
         }
       );
@@ -136,14 +171,14 @@
         cast.framework.events.EventType.ERROR,
         (event) => {
           const code = event && event.detailedErrorCode;
-          console.error(
-            "[Cast4TV receiver] ERROR:",
-            JSON.stringify({
-              detailedErrorCode: code,
-              name: ERROR_NAMES[code],
-              reason: event && event.reason,
-              error: event && event.error,
-            })
+          tvError(
+            "ERROR: " +
+              JSON.stringify({
+                detailedErrorCode: code,
+                name: ERROR_NAMES[code],
+                reason: event && event.reason,
+                error: event && event.error,
+              })
           );
         }
       );
