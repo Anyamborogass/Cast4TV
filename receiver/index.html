@@ -146,7 +146,11 @@
                 };
               }
 
-              loadRequest.playbackConfig = playbackConfig;
+              // Apply via the PlayerManager — assigning loadRequest.playbackConfig
+              // is IGNORED by CAF, so the licenseUrl never reaches Shaka and it
+              // fails with 6012 NO_LICENSE_SERVER_GIVEN. setPlaybackConfig is the
+              // documented way to inject a per-item license server.
+              playerManager.setPlaybackConfig(playbackConfig);
               tvLog("Widevine configured -> " + licenseUrl);
             } else {
               tvError("NO licenseUrl in customData — Widevine NOT configured!");
@@ -200,7 +204,7 @@
       // LATEST build (Chromecast caches receivers aggressively — if the version
       // below doesn't show up in Metro, the device is serving a stale copy and
       // needs a reboot to refresh).
-      const RECEIVER_VERSION = "debug-3";
+      const RECEIVER_VERSION = "debug-4";
       const options = new cast.framework.CastReceiverOptions();
       options.customNamespaces = Object.assign({}, options.customNamespaces, {
         [DEBUG_NS]: cast.framework.system.MessageType.JSON,
